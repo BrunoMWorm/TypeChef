@@ -11,7 +11,7 @@ trait CFGWriter {
 
     def writeNode(node: AST, fexpr: FeatureExpr, containerName: String)
 
-    def writeEdge(source: AST, target: AST, fexpr: FeatureExpr)
+    def writeEdge(source: AST, target: AST, fexpr: FeatureExpr, lookupFExpr: AST => FeatureExpr)
 
     def writeFooter()
 
@@ -22,12 +22,79 @@ trait CFGWriter {
     protected val printedNodes = new util.IdentityHashMap[AST, Object]()
     protected val FOUND = new Object()
 
+    protected val astToStableIDMap = scala.collection.mutable.Map[(AST, String), String]()
+    protected val astToContainerIDMap =  scala.collection.mutable.Map[(AST, String), (String, String)]()
+    protected val astChildrenInContainerCounter = scala.collection.mutable.Map[(String, String), Int]()
+    protected val astToPositionInContainerMap = scala.collection.mutable.Map[(AST, String), Int]()
 
+    protected def generateStableID(o: AST, fexpr: FeatureExpr): String = o match {
+        case FunctionDef(_, decl, _, _) => (decl.getName + fexpr.toTextExpr).hashCode().toString()
+        case s: Statement => {
+            val fexrpText = fexpr.toTextExpr
+            val astKey = (o, fexrpText)
+            val container = astToContainerIDMap.get(astKey)
+
+            val positionInContainer = astToPositionInContainerMap.get(astKey)
+            val content = escContent(PrettyPrinter.print(s))
+
+            val astIDParameters = content.toString() + container.toString() + positionInContainer + fexrpText 
+            val astNodeID = astIDParameters.hashCode().toString()
+            astNodeID
+        }
+        case e: Expr => {
+            val fexrpText = fexpr.toTextExpr
+            val astKey = (o, fexrpText)
+            val container = astToContainerIDMap.get(astKey)
+
+            val positionInContainer = astToPositionInContainerMap.get(astKey)
+            val content = escContent(PrettyPrinter.print(e))
+
+            val astIDParameters = content.toString() + container.toString() + positionInContainer + fexrpText 
+            val astNodeID = astIDParameters.hashCode().toString()
+            astNodeID
+        }
+        case Declaration(_, initDecl) => {
+            val fexrpText = fexpr.toTextExpr
+            val astKey = (o, fexrpText)
+            val container = astToContainerIDMap.get(astKey)
+
+            val positionInContainer = astToPositionInContainerMap.get(astKey)
+            val content = initDecl.map(_.entry.getName).mkString(",")
+
+            val astIDParameters = content.toString() + container.toString() + positionInContainer + fexrpText 
+            val astNodeID = astIDParameters.hashCode().toString()
+            astNodeID
+        }
+        case _ => System.identityHashCode(o).toString()
+    }
+
+    private def escContent(i: String) = {
+        i.replace(";", "").
+            replace("\n", " ")
+    }
 
     protected def writeNodeOnce(o: AST, fexpr: () => FeatureExpr, containerName: String) {
         if (!printedNodes.containsKey(o)) {
             printedNodes.put(o, FOUND)
-            writeNode(o, fexpr(), containerName)
+            val featureExpr = fexpr()
+            val featureExprText = featureExpr.toTextExpr
+            val astKey = (o, featureExprText)
+
+            // Generate the ID for the container which contains the current Node
+            val containerID = (containerName, featureExprText)
+            astToContainerIDMap.put(astKey, containerID)
+            // Now, we must map the currentNode to its position on the tree
+            // 1. First, we get the currentPosition in the tree
+            val currentAstPositionInContainer = astChildrenInContainerCounter.get(containerID)
+                 .getOrElse(0)
+            val updatedAstPositionInContainer = currentAstPositionInContainer + 1
+            astChildrenInContainerCounter.put(containerID, updatedAstPositionInContainer)
+            // Then, we map the current Node to its new position
+            astToPositionInContainerMap.put(astKey, updatedAstPositionInContainer)
+            val astNodeID = generateStableID(o, featureExpr)
+
+            astToStableIDMap.put(astKey, astNodeID)
+            writeNode(o, featureExpr, containerName)
         }
     }
 
@@ -37,10 +104,10 @@ trait CFGWriter {
             writeNodeOnce(o, ()=>lookupFExpr(o), containerName)
 
             // iterate successors and add edges
-            for (Opt(f, succ) <- csuccs) {
+            for (Opt(f,  succ) <- csuccs) {
                 writeNodeOnce(succ, ()=>lookupFExpr(succ), containerName)
 
-                writeEdge(o, succ, f)
+                writeEdge(o, succ, f, lookupFExpr)
             }
         }
     }
@@ -65,14 +132,14 @@ class DotGraph(fwriter: Writer) extends IOUtilities with CFGWriter {
 
     private def asText(o: AST): String = o match {
         case FunctionDef(_, decl, _, _) => "Function " + o.getPositionFrom.getLine + ": " + decl.getName
-        case s: Statement => "Stmt " + s.getPositionFrom.getLine + ": " + PrettyPrinter.print(s).take(20)
-        case e: Expr => "Expr " + e.getPositionFrom.getLine + ": " + PrettyPrinter.print(e).take(20)
+        case s: Statement => "Stmt " + s.getPositionFrom.getLine + ": " + PrettyPrinter.print(s)
+        case e: Expr => "Expr " + e.getPositionFrom.getLine + ": " + PrettyPrinter.print(e)
         case Declaration(_, initDecl) => "Decl " + o.getPositionFrom.getLine + ": " + initDecl.map(_.entry.getName).mkString(", ")
-        case x => esc(PrettyPrinter.print(x)).take(20)
+        case x => esc(PrettyPrinter.print(x))
     }
 
 
-    def writeEdge(source: AST, target: AST, fexpr: FeatureExpr) {
+    def writeEdge(source: AST, target: AST, fexpr: FeatureExpr, lookupFExpr: AST => FeatureExpr) {
         fwriter.write("\"" + System.identityHashCode(source) + "\" -> \"" + System.identityHashCode(target) + "\"")
         fwriter.write("[")
 
@@ -127,8 +194,7 @@ class DotGraph(fwriter: Writer) extends IOUtilities with CFGWriter {
 }
 
 
-class CFGCSVWriter(fwriter: Writer) extends IOUtilities with CFGWriter {
-
+class CFGCSVWriter(fwriter: Writer) extends CFGWriter with IOUtilities {
     /**
      * output format in CSV
      *
@@ -176,21 +242,24 @@ class CFGCSVWriter(fwriter: Writer) extends IOUtilities with CFGWriter {
             else if (specs.map(_.entry).contains(StaticSpecifier())) "function-static;"
             else "function;") +
                 o.getPositionFrom.getLine + ";" + decl.getName
-        case s: Statement => "statement;" + s.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(s).take(20))+"::"+containerName
-        case e: Expr => "expression;" + e.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(e).take(20))+"::"+containerName
+        case s: Statement => "statement;" + s.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(s))+"::"+containerName
+        case e: Expr => "expression;" + e.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(e))+"::"+containerName
         case Declaration(_, initDecl) => "declaration;" + o.getPositionFrom.getLine + ";" + initDecl.map(_.entry.getName).mkString(",")
-        case x => "unknown;" + x.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(x).take(20))+"::"+containerName
+        case x => "unknown;" + x.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(x))+"::"+containerName
     }
 
+    def writeEdge(source: AST, target: AST, fexpr: FeatureExpr, lookupFExpr: AST => FeatureExpr) {
+        val featureExprText = fexpr.toTextExpr
+        val sourceAstKey = (source, lookupFExpr(source).toTextExpr)
+        val targetAstKey = (target, lookupFExpr(target).toTextExpr)
 
-
-
-    def writeEdge(source: AST, target: AST, fexpr: FeatureExpr) {
-        fwriter.write("E;" + System.identityHashCode(source) + ";" + System.identityHashCode(target) + ";" + fexpr.toTextExpr + "\n")
+        fwriter.write("E;" + astToStableIDMap.get(sourceAstKey).getOrElse(null) + ";" + astToStableIDMap.get(targetAstKey).getOrElse(null) + ";" + featureExprText + "\n")
     }
 
     def writeNode(o: AST, fexpr: FeatureExpr, containerName: String) {
-        fwriter.write("N;" + System.identityHashCode(o) + ";" + asText(o, containerName) + ";" + fexpr.toTextExpr + "\n")
+        val featureExprText = fexpr.toTextExpr
+        val astKey = (o, featureExprText)
+        fwriter.write("N;" + astToStableIDMap.get(astKey).getOrElse(null) + ";" + asText(o, containerName) + ";" + featureExprText + "\n")
     }
 
     def writeFooter() {
@@ -211,12 +280,13 @@ class CFGCSVWriter(fwriter: Writer) extends IOUtilities with CFGWriter {
 
 
 class ComposedWriter(writers: List[CFGWriter]) extends CFGWriter {
+
     def writeNode(node: AST, fexpr: FeatureExpr, containerName: String) {
         writers.map(_.writeNode(node, fexpr, containerName))
     }
 
-    def writeEdge(source: AST, target: AST, fexpr: FeatureExpr) {
-        writers.map(_.writeEdge(source, target, fexpr))
+    def writeEdge(source: AST, target: AST, fexpr: FeatureExpr, lookupFExpr: AST => FeatureExpr) {
+        writers.map(_.writeEdge(source, target, fexpr, lookupFExpr))
     }
 
     def writeFooter() {

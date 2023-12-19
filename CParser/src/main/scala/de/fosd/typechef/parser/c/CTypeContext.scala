@@ -20,9 +20,10 @@ case class CTypeContext(val types: Map[String, FeatureExpr] = Map()) {
         new CTypeContext(mergeMap(List(this.types, that.types))(_ or _))
 
 
-    //copied from http://stackoverflow.com/questions/1262741/scala-how-to-merge-a-collection-of-maps/1264772#1264772
+    // inspired by http://stackoverflow.com/questions/1262741/scala-how-to-merge-a-collection-of-maps/1264772#1264772
+    // the only difference is the replacement of '/:' by 'foldLeft', as ':/' is not supported in Scala 2.12.11
     private def mergeMap[A, B](ms: List[Map[A, B]])(f: (B, B) => B): Map[A, B] =
-        (Map[A, B]() /: (for (m <- ms; kv <- m) yield kv)) {
+        ((for (m <- ms; kv <- m) yield kv) foldLeft Map[A, B]()) {
             (a, kv) =>
                 a + (if (a.contains(kv._1)) kv._1 -> f(a(kv._1), kv._2) else kv)
         }

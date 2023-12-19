@@ -186,7 +186,7 @@ object Frontend extends EnforceTreeHelper {
                     val cf = new CInterAnalysisFrontend(ast/*, fm_ts*/)
                     val writer = new CFGCSVWriter(new FileWriter(new File(opt.getCCFGFilename)))
                     val dotwriter = new DotGraph(new FileWriter(new File(opt.getCCFGDotFilename)))
-                    cf.writeCFG(opt.getFile, new ComposedWriter(List(dotwriter, writer)))
+                    cf.writeCFG(opt.getFile,  writer)
                 }
 
                 if (opt.staticanalyses) {
