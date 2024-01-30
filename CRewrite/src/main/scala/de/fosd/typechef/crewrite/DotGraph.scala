@@ -65,10 +65,10 @@ class DotGraph(fwriter: Writer) extends IOUtilities with CFGWriter {
 
     private def asText(o: AST): String = o match {
         case FunctionDef(_, decl, _, _) => "Function " + o.getPositionFrom.getLine + ": " + decl.getName
-        case s: Statement => "Stmt " + s.getPositionFrom.getLine + ": " + PrettyPrinter.print(s).take(20)
-        case e: Expr => "Expr " + e.getPositionFrom.getLine + ": " + PrettyPrinter.print(e).take(20)
+        case s: Statement => "Stmt " + s.getPositionFrom.getLine + ": " + PrettyPrinter.print(s)
+        case e: Expr => "Expr " + e.getPositionFrom.getLine + ": " + PrettyPrinter.print(e)
         case Declaration(_, initDecl) => "Decl " + o.getPositionFrom.getLine + ": " + initDecl.map(_.entry.getName).mkString(", ")
-        case x => esc(PrettyPrinter.print(x)).take(20)
+        case x => esc(PrettyPrinter.print(x))
     }
 
 
@@ -176,10 +176,10 @@ class CFGCSVWriter(fwriter: Writer) extends IOUtilities with CFGWriter {
             else if (specs.map(_.entry).contains(StaticSpecifier())) "function-static;"
             else "function;") +
                 o.getPositionFrom.getLine + ";" + decl.getName
-        case s: Statement => "statement;" + s.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(s).take(20))+"::"+containerName
-        case e: Expr => "expression;" + e.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(e).take(20))+"::"+containerName
+        case s: Statement => "statement;" + s.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(s))+"::"+containerName
+        case e: Expr => "expression;" + e.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(e))+"::"+containerName
         case Declaration(_, initDecl) => "declaration;" + o.getPositionFrom.getLine + ";" + initDecl.map(_.entry.getName).mkString(",")
-        case x => "unknown;" + x.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(x).take(20))+"::"+containerName
+        case x => "unknown;" + x.getPositionFrom.getLine + ";" + esc(PrettyPrinter.print(x))+"::"+containerName
     }
 
 
