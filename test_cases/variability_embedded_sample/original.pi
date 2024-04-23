@@ -1,0 +1,85 @@
+#line 1 "test_cases/variability_embedded_sample/original.c" 1
+int eita_original (int a, int b) {
+   int fator = b * 3;
+   #if definedEx(ADICIONAL_FATOR)
+   fator += 1;
+   #endif
+   return (a * fator);
+}
+
+int eita_a_ser_modificada (int a, int b) {
+   int fator = b * 4;
+   #if definedEx(ADICIONAL_FATOR)
+   fator += 1;  
+   #endif
+   return (a * fator);
+}
+
+int foo_original
+#if definedEx(A)
+(int a) {
+    #if definedEx(B)
+    return a * 2;
+    #endif
+#if !definedEx(B)
+    int x = a * 3 + 1;
+    #endif
+#endif
+#if !definedEx(A)
+(int a, int b) {
+    return (a
+    #if definedEx(B)
+        +
+    #endif
+#if !definedEx(B)
+        * 2 +
+    #endif
+    b);
+#endif
+}
+
+int foo_modificada_dentro_else
+#if definedEx(A)
+(int a) {
+    #if definedEx(B)
+    return a * 2;
+    #endif
+#if !definedEx(B)
+    int x = a * 3 + 1;
+    #endif
+#endif
+#if !definedEx(A)
+(int a, int b) {
+    return (a
+    #if definedEx(B)
+        +
+    #endif
+#if !definedEx(B)
+        * 3 +
+    #endif
+    b);
+#endif
+}
+
+int foo_modificada_condicao_presenca
+#if definedEx(A)
+(int a) {
+    #if definedEx(B)
+    return a * 2;
+    #endif
+#if !definedEx(B)
+    int x = a * 3 + 1;
+    #endif
+#endif
+#if !definedEx(A)
+(int a, int b) {
+    return (a
+    #if definedEx(B)
+        +
+    #endif
+#if !definedEx(B)
+        * 2 +
+    #endif
+    b);
+#endif
+}
